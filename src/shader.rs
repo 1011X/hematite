@@ -3,14 +3,14 @@ use gfx;
 use vecmath::{self, Matrix4};
 
 static VERTEX: &'static [u8] = b"
-    #version 150 core
+    #version 120
     uniform mat4 u_projection, u_view;
 
-    in vec2 at_tex_coord;
-    in vec3 at_color, at_position;
+    attribute vec2 at_tex_coord;
+    attribute vec3 at_color, at_position;
 
-    out vec2 v_tex_coord;
-    out vec3 v_color;
+    varying vec2 v_tex_coord;
+    varying vec3 v_color;
 
     void main() {
         v_tex_coord = at_tex_coord;
@@ -20,19 +20,17 @@ static VERTEX: &'static [u8] = b"
 ";
 
 static FRAGMENT: &'static [u8] = b"
-    #version 150 core
-    out vec4 out_color;
-
+    #version 120
     uniform sampler2D s_texture;
 
-    in vec2 v_tex_coord;
-    in vec3 v_color;
+    varying vec2 v_tex_coord;
+    varying vec3 v_color;
 
     void main() {
-        vec4 tex_color = texture(s_texture, v_tex_coord);
+        vec4 tex_color = texture2D(s_texture, v_tex_coord);
         if(tex_color.a == 0.0) // Discard transparent pixels.
             discard;
-        out_color = tex_color * vec4(v_color, 1.0);
+        gl_FragColor = tex_color * vec4(v_color, 1.0);
     }
 ";
 
@@ -41,7 +39,7 @@ gfx_pipeline!( pipe {
     transform: gfx::Global<[[f32; 4]; 4]> = "u_projection",
     view: gfx::Global<[[f32; 4]; 4]> = "u_view",
     color: gfx::TextureSampler<[f32; 4]> = "s_texture",
-    out_color: gfx::RenderTarget<gfx::format::Srgba8> = "out_color",
+    out_color: gfx::RenderTarget<gfx::format::Srgba8> = "Target0",
     out_depth: gfx::DepthTarget<gfx::format::DepthStencil> =
         gfx::preset::depth::LESS_EQUAL_WRITE,
 });
