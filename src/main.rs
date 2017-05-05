@@ -211,7 +211,7 @@ fn main() {
     println!("Press C to capture mouse");
 
     let mut staging_buffer = vec![];
-    let mut events = Events::new(EventSettings::new().ups(60).max_fps(60));
+    let mut events = Events::new(EventSettings::new().ups(30).max_fps(60));
     while let Some(e) = events.next(&mut window) {
         use piston::input::Button::Keyboard;
         use piston::input::Input;

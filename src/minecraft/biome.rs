@@ -25,11 +25,11 @@ impl Biomes {
         let grass_colors = Path::new("minecraft/textures/colormap/grass.png");
         let grass_colors = ColorMap::from_path(&assets.join(&grass_colors)).unwrap();
         let foliage_colors = Path::new("minecraft/textures/colormap/foliage.png");
-        let foliage_colors = ColorMap::from_path(&assets.join(foliage_colors)).unwrap();
+        let foliage_colors = ColorMap::from_path(&assets.join(&foliage_colors)).unwrap();
 
         for (i, &biome) in data::BIOMES.iter().enumerate() {
             biomes[i] = biome.map(|(name, t, h)| Biome {
-                name: name,
+                name,
                 temperature: t,
                 humidity: h,
                 grass_color: grass_colors.get(t, h),

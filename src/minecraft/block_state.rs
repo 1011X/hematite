@@ -204,7 +204,7 @@ impl<R: gfx::Resources> BlockStates<R> {
 
         let last_id = states.last().map_or(0, |state| state.id);
         let mut models = Vec::with_capacity(last_id as usize + 1);
-        let mut atlas = AtlasBuilder::new(assets.join(Path::new("minecraft/textures")), 16, 16);
+        let mut atlas = AtlasBuilder::new(assets.join("minecraft/textures"), 16, 16);
         let mut partial_model_cache = HashMap::new();
         let mut block_state_cache: HashMap<String, HashMap<String, Variant>> = HashMap::new();
 
@@ -214,7 +214,7 @@ impl<R: gfx::Resources> BlockStates<R> {
                 Vacant(entry) => entry.insert({
                     use rustc_serialize::json::Json;
                     let name = state.name;
-                    let path = assets.join(Path::new(&format!("minecraft/blockstates/{}.json", name)));
+                    let path = assets.join(format!("minecraft/blockstates/{}.json", name));
                     match Json::from_reader(&mut File::open(&path).unwrap()).unwrap() {
                         Json::Object(mut json) => match json.remove("variants").unwrap() {
                             Json::Object(variants) => variants.into_iter().map(|(k, v)| {

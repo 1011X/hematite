@@ -85,7 +85,7 @@ pub type Compound = HashMap<String, Nbt>;
 
 impl Nbt {
     pub fn from_reader<R: Read>(r: R) -> NbtReaderResult<Nbt> {
-        Ok(try!(NbtReader::new(r).tag()).unwrap().0)
+        Ok(NbtReader::new(r).tag()?.unwrap().0)
     }
 
     pub fn from_gzip(data: &[u8]) -> NbtReaderResult<Nbt> {
@@ -186,22 +186,22 @@ impl<R: Read> NbtReader<R> {
     fn f64(&mut self) -> NbtReaderResult<f64> { self.reader.read_f64::<BigEndian>().map_err(NbtReaderError::from) }
 
     fn string(&mut self) -> NbtReaderResult<String> {
-        let len = try!(self.reader.read_u16::<BigEndian>()) as usize;
+        let len = self.reader.read_u16::<BigEndian>()? as usize;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             let mut c = [0];
-            try!(self.reader.read(&mut c));
+            self.reader.read(&mut c)?;
             v.push(c[0])
         }
         String::from_utf8(v).map_err(NbtReaderError::from)
     }
 
     fn array_u8(&mut self) -> NbtReaderResult<Vec<u8>> {
-        let len = try!(self.i32()) as usize;
+        let len = self.i32()? as usize;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             let mut c = [0];
-            try!(self.reader.read(&mut c));
+            self.reader.read(&mut c)?;
             v.push(c[0])
         }
         Ok(v)
@@ -210,17 +210,17 @@ impl<R: Read> NbtReader<R> {
     fn array<T, F>(&mut self, mut read: F) -> NbtReaderResult<Vec<T>>
         where F: FnMut(&mut NbtReader<R>) -> NbtReaderResult<T>
     {
-        let len = try!(self.i32()) as usize;
+        let len = self.i32()? as usize;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
-            v.push(try!(read(self)))
+            v.push(read(self)?)
         }
         Ok(v)
     }
 
     fn compound(&mut self) -> NbtReaderResult<Compound> {
         let mut map = HashMap::new();
-        while let Some((v, name)) = try!(self.tag()) {
+        while let Some((v, name)) = self.tag()? {
             map.insert(name, v);
         }
         Ok(map)
@@ -252,7 +252,7 @@ impl<R: Read> NbtReader<R> {
             TAG_END => None,
             tag_type => {
                 let name = self.string()?;
-                Some((try!(match tag_type {
+                Some((match tag_type {
                     TAG_BYTE => self.i8().map(Nbt::Byte),
                     TAG_SHORT => self.i16().map(Nbt::Short),
                     TAG_INT => self.i32().map(Nbt::Int),
@@ -265,7 +265,7 @@ impl<R: Read> NbtReader<R> {
                     TAG_LIST => self.list().map(Nbt::List),
                     TAG_COMPOUND => self.compound().map(Nbt::Compound),
                     tag_type => panic!("Unexpected tag type {}", tag_type)
-                }), name))
+                }?, name))
             }
         })
     }
@@ -345,7 +345,7 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_i8 (&mut self) -> DecodeResult<i8>  { expect!(self, Nbt::Byte) }
 
     fn read_isize(&mut self) -> DecodeResult<isize> {
-        match try!(self.pop()) {
+        match self.pop()? {
             Nbt::Byte(x) => Ok(x as isize),
             Nbt::Short(x) => Ok(x as isize),
             Nbt::Int(x) => Ok(x as isize),

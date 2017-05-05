@@ -10,6 +10,7 @@ use self::OrthoRotation::*;
 
 use array::*;
 use cube;
+// use serde_json as json;
 use rustc_serialize::json;
 use gfx_voxel::texture::AtlasBuilder;
 
@@ -111,7 +112,8 @@ impl PartialModel {
         if let Some(model) = cache.get(name) {
             return f(model, atlas);
         }
-        let path = assets.join(Path::new(&format!("minecraft/models/{}.json", name)));
+        let path = assets.join(format!("minecraft/models/{}.json", name));
+        // let obj = json::from_reader(File::open(&path).unwrap()).unwrap();
         let obj = json::Json::from_reader(&mut File::open(&path).unwrap()).unwrap();
 
         let mut model = match obj.find("parent").and_then(|x| x.as_string()) {
@@ -216,8 +218,8 @@ impl PartialModel {
 
                     model.faces.push((Face {
                         vertices: Array::from_fn(|i| Vertex { xyz: xyz[i], uv: uvs[i] }),
-                        tint: tint,
-                        cull_face: cull_face,
+                        tint,
+                        cull_face,
                         ao_face: Some(face)
                     }, tex));
                 }
@@ -351,9 +353,9 @@ impl Model {
             };
 
             Model {
-                faces: faces,
+                faces,
                 opacity: *full_faces.iter().min().unwrap(),
-                tint_source: tint_source
+                tint_source
             }
         })
     }
