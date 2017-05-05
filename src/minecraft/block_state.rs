@@ -15,7 +15,6 @@ use minecraft::biome::Biomes;
 use minecraft::data::BLOCK_STATES;
 use minecraft::model::OrthoRotation::*;
 use minecraft::model::{self, Model, OrthoRotation};
-use rustc_serialize::json;
 use shader::Vertex;
 use vecmath::vec3_add;
 
@@ -113,9 +112,7 @@ impl ModelAndBehavior {
 
 impl<R: gfx::Resources> BlockStates<R> {
 
-    pub fn load<F: gfx::Factory<R>>(
-        assets: &Path, f: &mut F
-    ) -> BlockStates<R> {
+    pub fn load<F: gfx::Factory<R>>(assets: &Path, f: &mut F) -> BlockStates<R> {
         let mut last_id = BLOCK_STATES.last().map_or(0, |state| state.0);
         let mut states = Vec::<Description>::with_capacity(BLOCK_STATES.len().next_power_of_two());
         let mut extras = vec![];
@@ -211,29 +208,30 @@ impl<R: gfx::Resources> BlockStates<R> {
         let mut partial_model_cache = HashMap::new();
         let mut block_state_cache: HashMap<String, HashMap<String, Variant>> = HashMap::new();
 
-        for state in states.into_iter() {
+        for state in states {
             let variants = match block_state_cache.entry(state.name.to_string()) {
                 Occupied(entry) => entry.into_mut(),
                 Vacant(entry) => entry.insert({
+                    use rustc_serialize::json::Json;
                     let name = state.name;
                     let path = assets.join(Path::new(&format!("minecraft/blockstates/{}.json", name)));
-                    match json::Json::from_reader(&mut File::open(&path).unwrap()).unwrap() {
-                        json::Json::Object(mut json) => match json.remove("variants").unwrap() {
-                            json::Json::Object(variants) => variants.into_iter().map(|(k, v)| {
+                    match Json::from_reader(&mut File::open(&path).unwrap()).unwrap() {
+                        Json::Object(mut json) => match json.remove("variants").unwrap() {
+                            Json::Object(variants) => variants.into_iter().map(|(k, v)| {
                                 let mut variant = match v {
-                                    json::Json::Object(o) => o,
-                                    json::Json::Array(l) => {
+                                    Json::Object(o) => o,
+                                    Json::Array(l) => {
                                         println!("ignoring {} extra variants for {}#{}",
                                                  l.len() - 1, name, k);
                                         match l.into_iter().next() {
-                                            Some(json::Json::Object(o)) => Some(o),
+                                            Some(Json::Object(o)) => Some(o),
                                             _ => None
                                         }.unwrap()
                                     }
                                     json => panic!("{}#{} has invalid value {}", name, k, json)
                                 };
                                 let model = match variant.remove("model").unwrap() {
-                                    json::Json::String(s) => s,
+                                    Json::String(s) => s,
                                     json => panic!("'model' has invalid value {}", json)
                                 };
                                 let rotate_x = variant.remove("x").map_or(Rotate0, |r| {
@@ -277,8 +275,8 @@ impl<R: gfx::Resources> BlockStates<R> {
             let rotate_faces = |m: &mut Model, ix: usize, iy: usize, rot_mat: [i32; 4]| {
                 let (a, b, c, d) = (rot_mat[0] as f32, rot_mat[1] as f32,
                                     rot_mat[2] as f32, rot_mat[3] as f32);
-                for face in m.faces.iter_mut() {
-                    for vertex in face.vertices.iter_mut() {
+                for face in &mut m.faces {
+                    for vertex in &mut face.vertices {
                         let xyz = &mut vertex.xyz;
                         let (x, y) = (xyz[ix] - 0.5, xyz[iy] - 0.5);
                         xyz[ix] = a * x + b * y + 0.5;
@@ -292,22 +290,16 @@ impl<R: gfx::Resources> BlockStates<R> {
                         dir[iy] = c * x + d * y;
                         cube::Face::from_direction(dir).unwrap()
                     };
-                    face.cull_face = match face.cull_face {
-                        None => None,
-                        Some(f) => Some(fixup_cube_face(f))
-                    };
-                    face.ao_face = match face.ao_face {
-                        None => None,
-                        Some(f) => Some(fixup_cube_face(f))
-                    };
+                    face.cull_face = face.cull_face.map(&fixup_cube_face);
+                    face.ao_face = face.ao_face.map(&fixup_cube_face);
                     if variant.uvlock {
                         // Skip over faces that are constant in the ix or iy axis.
                         let xs = face.vertices.map(|v| v.xyz[ix]);
-                        if xs.map(|x| x == xs[0]) == [true, true, true, true] {
+                        if xs.iter().all(|&x| x == xs[0]) {
                             continue;
                         }
                         let ys = face.vertices.map(|v| v.xyz[iy]);
-                        if ys.map(|y| y == ys[0]) == [true, true, true, true] {
+                        if ys.iter().all(|&y| y == ys[0]) {
                             continue;
                         }
 
@@ -316,7 +308,7 @@ impl<R: gfx::Resources> BlockStates<R> {
                                                 .min(uvs[2][i]).min(uvs[3][i]));
                         let temp = uv_min.map(|x| (x / 16.0).floor() * 16.0);
                         let (u_base, v_base) = (temp[0], temp[1]);
-                        for vertex in face.vertices.iter_mut() {
+                        for vertex in &mut face.vertices {
                             let uv = &mut vertex.uv;
                             let (u, v) = (uv[0] - u_base - 8.0, uv[1] - v_base - 8.0);
                             uv[0] = a * u - b * v + 8.0 + u_base;
@@ -360,19 +352,16 @@ impl<R: gfx::Resources> BlockStates<R> {
         let u_unit = 1.0 / (width as f32);
         let v_unit = 1.0 / (height as f32);
 
-        for model in models.iter_mut() {
-            for face in model.model.faces.iter_mut() {
-                for vertex in face.vertices.iter_mut() {
+        for model in &mut models {
+            for face in &mut model.model.faces {
+                for vertex in &mut face.vertices {
                     vertex.uv[0] *= u_unit;
                     vertex.uv[1] *= v_unit;
                 }
             }
         }
 
-        BlockStates {
-            models: models,
-            texture: texture
-        }
+        BlockStates { models, texture }
     }
 
     pub fn get_model(&self, i: BlockState) -> Option<&ModelAndBehavior> {
@@ -475,15 +464,12 @@ pub fn fill_buffer<R: gfx::Resources>(block_states: &BlockStates<R>,
                     }
                 };
                 let model = &model.model;
-                for face in model.faces.iter() {
-                    match face.cull_face {
-                        Some(cull_face) => {
-                            let (neighbor, _) = at(cull_face.direction());
-                            if block_states.get_opacity(neighbor).is_opaque() {
-                                continue;
-                            }
+                for face in &model.faces {
+                    if let Some(cull_face) = face.cull_face {
+                        let (neighbor, _) = at(cull_face.direction());
+                        if block_states.get_opacity(neighbor).is_opaque() {
+                            continue;
                         }
-                        None => {}
                     }
 
                     let tint_source = if face.tint {
@@ -504,9 +490,9 @@ pub fn fill_buffer<R: gfx::Resources>(block_states: &BlockStates<R>,
 
                         let rounded_xyz = vertex.xyz.map(|x| x.round() as i32);
                         let (dx, dy, dz) = (rounded_xyz[0], rounded_xyz[1], rounded_xyz[2]);
-                        for &dx in [dx - 1, dx].iter() {
-                            for &dz in [dz - 1, dz].iter() {
-                                for &dy in [dy - 1, dy].iter() {
+                        for &dx in &[dx - 1, dx] {
+                            for &dz in &[dz - 1, dz] {
+                                for &dy in &[dy - 1, dy] {
                                     let (neighbor, light_level) = at([dx, dy, dz]);
                                     let light_level = max(light_level.block_light(),
                                                           light_level.sky_light());
@@ -566,20 +552,21 @@ pub fn fill_buffer<R: gfx::Resources>(block_states: &BlockStates<R>,
                             }
                         }
 
-                        let light_factor = 0.2 + if num_light_level != 0.0 {
-                            sum_light_level / num_light_level / 15.0 * 0.8
-                        } else { 0.0 };
+                        let mut light_factor = 0.2;
+                        
+                        if num_light_level != 0.0 {
+                            light_factor += sum_light_level / num_light_level / 15.0 * 0.8;
+                        }
 
                         // Up, North and South, East and West, Down have different lighting.
-                        let light_factor = light_factor * match face.ao_face {
-                            Some(ao_face) => match ao_face {
+                        light_factor *= face.ao_face
+                            .map(|ao_face| match ao_face {
                                 cube::Up => 1.0,
                                 cube::North | cube::South => 0.8,
                                 cube::East | cube::West => 0.6,
                                 cube::Down => 0.5
-                            },
-                            None => 1.0
-                        };
+                            })
+                            .unwrap_or(1.0);
 
                         Vertex {
                             xyz: vec3_add(block_xyz, vertex.xyz),

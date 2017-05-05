@@ -1,5 +1,5 @@
 // (name, temperature, humidity)
-pub static BIOMES: [Option<(&'static str, f32, f32)>; 256] = [
+pub static BIOMES: [Option<(&str, f32, f32)>; 256] = [
     Some(("Ocean", 0.5, 0.5)),
     Some(("Plains", 0.8, 0.4)),
     Some(("Desert", 2.0, 0.0)),
@@ -81,7 +81,7 @@ pub static BIOMES: [Option<(&'static str, f32, f32)>; 256] = [
 ];
 
 // (id, name, variant)
-pub static BLOCK_STATES: &'static [(u16, &'static str, &'static str)] = &[
+pub static BLOCK_STATES: &[(u16, &str, &str)] = &[
     // 0000: "minecraft:air" (null)
     (0x0010, "stone", "normal"),
     (0x0011, "granite", "normal"),

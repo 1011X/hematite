@@ -74,9 +74,5 @@ pub fn fetch_assets(version: &str) {
 
 fn sanitize_filename(filename: &str) -> PathBuf {
     // PathBuf::from(filename.trim_right_matches('\0'))
-    let no_null_filename = match filename.find('\0') {
-        Some(index) => &filename[0..index],
-        None => filename,
-    };
-    PathBuf::from(no_null_filename)
+    PathBuf::from(filename.split('\0').nth(0).unwrap())
 }

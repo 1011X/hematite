@@ -227,9 +227,9 @@ impl<R: Read> NbtReader<R> {
     }
 
     fn list(&mut self) -> NbtReaderResult<List> {
-        match try!(self.i8()) {
+        match self.i8()? {
             TAG_END => {
-                assert_eq!(try!(self.i32()), 0);
+                assert_eq!(self.i32()?, 0);
                 Ok(List::Compound(Vec::new()))
             }
             TAG_BYTE => self.array(|r| r.i8()).map(List::Byte),
@@ -248,10 +248,10 @@ impl<R: Read> NbtReader<R> {
     }
 
     pub fn tag(&mut self) -> NbtReaderResult<Option<(Nbt, String)>> {
-        Ok(match try!(self.i8()) {
+        Ok(match self.i8()? {
             TAG_END => None,
             tag_type => {
-                let name = try!(self.string());
+                let name = self.string()?;
                 Some((try!(match tag_type {
                     TAG_BYTE => self.i8().map(Nbt::Byte),
                     TAG_SHORT => self.i16().map(Nbt::Short),
@@ -331,7 +331,7 @@ impl rustc_serialize::Decoder for Decoder {
     type Error = DecoderError;
 
     fn read_nil(&mut self) -> DecodeResult<()> {
-        Err(ExpectedError("()".to_string(), try!(self.pop()).to_string()))
+        Err(ExpectedError("()".to_string(), self.pop()?.to_string()))
     }
 
     fn read_u64(&mut self) -> DecodeResult<u64> { expect!(self, Nbt::Long).map(|x| x as u64) }
@@ -354,24 +354,23 @@ impl rustc_serialize::Decoder for Decoder {
         }
     }
     fn read_usize(&mut self) -> DecodeResult<usize> {
-        Ok(try!(self.read_isize()) as usize)
+        Ok(self.read_isize()? as usize)
     }
 
     fn read_bool(&mut self) -> DecodeResult<bool> {
-        Ok(try!(self.read_u8()) != 0)
+        Ok(self.read_u8()? != 0)
     }
 
     fn read_f64(&mut self) -> DecodeResult<f64> { expect!(self, Nbt::Double) }
     fn read_f32(&mut self) -> DecodeResult<f32> { expect!(self, Nbt::Float) }
 
     fn read_char(&mut self) -> DecodeResult<char> {
-        let s = try!(self.read_str());
+        let s = self.read_str()?;
         {
             let mut it = s.chars();
-            match (it.next(), it.next()) {
-                // exactly one character
-                (Some(c), None) => return Ok(c),
-                _ => ()
+            // exactly one character
+            if let (Some(c), None) = (it.next(), it.next()) {
+                return Ok(c);
             }
         }
         Err(ExpectedError("single character string".to_string(), s))
@@ -390,7 +389,7 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_enum_variant<T, F>(&mut self, names: &[&str], mut f: F) -> DecodeResult<T>
         where F: FnMut(&mut Self, usize) -> DecodeResult<T>
     {
-        let name = match try!(self.pop()) {
+        let name = match self.pop()? {
             Nbt::String(s) => s,
             Nbt::Compound(mut o) => {
                 let name = match o.remove("variant") {
@@ -401,8 +400,8 @@ impl rustc_serialize::Decoder for Decoder {
                 match o.remove("fields") {
                     Some(v) => {
                         self.push(v);
-                        try!(self.read_seq(|_, _| Ok(())));
-                    },
+                        self.read_seq(|_, _| Ok(()))?;
+                    }
                     None => return Err(MissingFieldError("fields".to_string()))
                 }
                 name
@@ -440,7 +439,7 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_struct<T, F>(&mut self, _name: &str, _len: usize, f: F) -> DecodeResult<T>
         where F: FnOnce(&mut Self) -> DecodeResult<T>
     {
-        let value = try!(f(self));
+        let value = f(self)?;
         let _ = self.pop();
         Ok(value)
     }
@@ -448,13 +447,13 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_struct_field<T, F>(&mut self, name: &str, _idx: usize, f: F) -> DecodeResult<T>
         where F: FnOnce(&mut Self) -> DecodeResult<T>
     {
-        let mut obj = try!(expect!(self, Nbt::Compound));
+        let mut obj = expect!(self, Nbt::Compound)?;
 
         let value = match obj.remove(name) {
             None => return Err(MissingFieldError(name.to_string())),
             Some(v) => {
                 self.stack.push(Ok(v));
-                try!(f(self))
+                f(self)?
             }
         };
         self.push(Nbt::Compound(obj));
@@ -504,7 +503,7 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_seq<T, F>(&mut self, f: F) -> DecodeResult<T>
         where F: FnOnce(&mut Self, usize) -> DecodeResult<T>
     {
-        let len = match try!(expect!(self, Nbt::List)) {
+        let len = match expect!(self, Nbt::List)? {
             List::Byte(list) => self.push_all(list, Nbt::Byte),
             List::Short(list) => self.push_all(list, Nbt::Short),
             List::Int(list) => self.push_all(list, Nbt::Int),
@@ -529,9 +528,9 @@ impl rustc_serialize::Decoder for Decoder {
     fn read_map<T, F>(&mut self, f: F) -> DecodeResult<T>
         where F: FnOnce(&mut Self, usize) -> DecodeResult<T>
     {
-        let obj = try!(expect!(self, Nbt::Compound));
+        let obj = expect!(self, Nbt::Compound)?;
         let len = obj.len();
-        for (key, value) in obj.into_iter() {
+        for (key, value) in obj {
             self.push(value);
             self.push(Nbt::String(key));
         }

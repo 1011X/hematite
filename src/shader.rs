@@ -2,37 +2,8 @@ use gfx::traits::FactoryExt;
 use gfx;
 use vecmath::{self, Matrix4};
 
-static VERTEX: &'static [u8] = b"
-    #version 120
-    uniform mat4 u_projection, u_view;
-
-    attribute vec2 at_tex_coord;
-    attribute vec3 at_color, at_position;
-
-    varying vec2 v_tex_coord;
-    varying vec3 v_color;
-
-    void main() {
-        v_tex_coord = at_tex_coord;
-        v_color = at_color;
-        gl_Position = u_projection * u_view * vec4(at_position, 1.0);
-    }
-";
-
-static FRAGMENT: &'static [u8] = b"
-    #version 120
-    uniform sampler2D s_texture;
-
-    varying vec2 v_tex_coord;
-    varying vec3 v_color;
-
-    void main() {
-        vec4 tex_color = texture2D(s_texture, v_tex_coord);
-        if(tex_color.a == 0.0) // Discard transparent pixels.
-            discard;
-        gl_FragColor = tex_color * vec4(v_color, 1.0);
-    }
-";
+static VERTEX: &[u8] = include_bytes!("shader.vert");
+static FRAGMENT: &[u8] = include_bytes!("shader.frag");
 
 gfx_pipeline!( pipe {
     vbuf: gfx::VertexBuffer<Vertex> = (),
@@ -89,7 +60,7 @@ impl<R: gfx::Resources, F: gfx::Factory<R>, C: gfx::CommandBuffer<R>> Renderer<R
         let slice = gfx::Slice::new_match_vertex_buffer(&vbuf);
 
         let data = pipe::Data {
-            vbuf: vbuf,
+            vbuf,
             transform: vecmath::mat4_id(),
             view: vecmath::mat4_id(),
             color: (texture_view, sampler),
@@ -98,14 +69,14 @@ impl<R: gfx::Resources, F: gfx::Factory<R>, C: gfx::CommandBuffer<R>> Renderer<R
         };
 
         Renderer {
-            factory: factory,
-            pipe: pipe,
-            data: data,
-            encoder: encoder,
+            factory,
+            pipe,
+            data,
+            encoder,
             clear_color: [0.81, 0.8, 1.0, 1.0],
             clear_depth: 1.0,
             clear_stencil: 0,
-            slice: slice,
+            slice,
         }
     }
 

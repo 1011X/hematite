@@ -45,7 +45,7 @@ pub mod shader;
 use minecraft::biome::Biomes;
 use minecraft::block_state::BlockStates;
 
-static USAGE: &'static str = "
+static USAGE: &str = "
 hematite, Minecraft made in Rust!
 
 Usage:
@@ -155,7 +155,7 @@ fn main() {
     // Load block state definitions and models.
     let block_states = BlockStates::load(&assets, &mut factory);
 
-	let encoder = factory.create_command_buffer().into();
+    let encoder = factory.create_command_buffer().into();
     let mut renderer = Renderer::new(factory, encoder, target_view, depth_view, block_states.texture.surface.clone());
 
     let mut chunk_manager = chunk::ChunkManager::new();
@@ -164,15 +164,12 @@ fn main() {
     let c_bases = player_chunk.map(|x| max(0, (x & 0x1f) - 8) as u8);
     for cz in c_bases[1]..c_bases[1] + 16 {
         for cx in c_bases[0]..c_bases[0] + 16 {
-            match region.get_chunk_column(cx, cz) {
-                Some(column) => {
-                    let (cx, cz) = (
-                        cx as i32 + regions[0] * 32,
-                        cz as i32 + regions[1] * 32
-                    );
-                    chunk_manager.add_chunk_column(cx, cz, column)
-                }
-                None => {}
+            if let Some(column) = region.get_chunk_column(cx, cz) {
+                let (cx, cz) = (
+                    cx as i32 + regions[0] * 32,
+                    cz as i32 + regions[1] * 32
+                );
+                chunk_manager.add_chunk_column(cx, cz, column)
             }
         }
     }
@@ -214,7 +211,7 @@ fn main() {
     println!("Press C to capture mouse");
 
     let mut staging_buffer = vec![];
-    let mut events = Events::new(EventSettings::new().ups(120).max_fps(10_000));
+    let mut events = Events::new(EventSettings::new().ups(60).max_fps(60));
     while let Some(e) = events.next(&mut window) {
         use piston::input::Button::Keyboard;
         use piston::input::Input;
@@ -242,46 +239,43 @@ fn main() {
                 let mut num_total_chunks: usize = 0;
                 let start_time = Instant::now();
                 chunk_manager.each_chunk(|cx, cy, cz, _, buffer| {
-                    match buffer.borrow_mut().as_mut() {
-                        Some(buffer) => {
-                            num_total_chunks += 1;
+                    if let Some(buffer) = buffer.borrow_mut().as_mut() {
+                        num_total_chunks += 1;
 
-                            let inf = INFINITY;
-                            let mut bb_min = [inf, inf, inf];
-                            let mut bb_max = [-inf, -inf, -inf];
-                            let xyz = [cx, cy, cz].map(|x| x as f32 * 16.0);
-                            for &dx in [0.0, 16.0].iter() {
-                                for &dy in [0.0, 16.0].iter() {
-                                    for &dz in [0.0, 16.0].iter() {
-                                        use vecmath::col_mat4_transform;
+                        let inf = INFINITY;
+                        let mut bb_min = [inf, inf, inf];
+                        let mut bb_max = [-inf, -inf, -inf];
+                        let xyz = [cx, cy, cz].map(|x| x as f32 * 16.0);
+                        for &dx in &[0.0, 16.0] {
+                            for &dy in &[0.0, 16.0] {
+                                for &dz in &[0.0, 16.0] {
+                                    use vecmath::col_mat4_transform;
 
-                                        let v = vec3_add(xyz, [dx, dy, dz]);
-                                        let xyzw = col_mat4_transform(view_mat, [v[0], v[1], v[2], 1.0]);
-                                        let v = col_mat4_transform(projection_mat, xyzw);
-                                        let xyz = vec3_scale([v[0], v[1], v[2]], 1.0 / v[3]);
-                                        bb_min = Array::from_fn(|i| bb_min[i].min(xyz[i]));
-                                        bb_max = Array::from_fn(|i| bb_max[i].max(xyz[i]));
-                                    }
-                                }
-                            }
-
-                            let cull_bits: [bool; 3] = Array::from_fn(|i| {
-                                let (min, max) = (bb_min[i], bb_max[i]);
-                                min.signum() == max.signum()
-                                    && min.abs().min(max.abs()) >= 1.0
-                            });
-
-                            if !cull_bits.iter().any(|&cull| cull) {
-                                renderer.render(buffer);
-                                num_chunks += 1;
-
-                                if bb_min[0] < 0.0 && bb_max[0] > 0.0
-                                || bb_min[1] < 0.0 && bb_max[1] > 0.0 {
-                                    num_sorted_chunks += 1;
+                                    let v = vec3_add(xyz, [dx, dy, dz]);
+                                    let xyzw = col_mat4_transform(view_mat, [v[0], v[1], v[2], 1.0]);
+                                    let v = col_mat4_transform(projection_mat, xyzw);
+                                    let xyz = vec3_scale([v[0], v[1], v[2]], 1.0 / v[3]);
+                                    bb_min = Array::from_fn(|i| bb_min[i].min(xyz[i]));
+                                    bb_max = Array::from_fn(|i| bb_max[i].max(xyz[i]));
                                 }
                             }
                         }
-                        None => {}
+
+                        let cull_bits: [bool; 3] = Array::from_fn(|i| {
+                            let (min, max) = (bb_min[i], bb_max[i]);
+                            min.signum() == max.signum()
+                                && min.abs().min(max.abs()) >= 1.0
+                        });
+
+                        if !cull_bits.iter().any(|&cull| cull) {
+                            renderer.render(buffer);
+                            num_chunks += 1;
+
+                            if bb_min[0] < 0.0 && bb_max[0] > 0.0
+                            || bb_min[1] < 0.0 && bb_max[1] > 0.0 {
+                                num_sorted_chunks += 1;
+                            }
+                        }
                     }
                 });
                 let end_duration = start_time.elapsed();
@@ -328,22 +322,25 @@ fn main() {
                         _ => Some(pending_chunks.swap_remove(i))
                     }
                 });
-                match pending {
-                    Some((coords, buffer, chunks, column_biomes)) => {
-                        minecraft::block_state::fill_buffer(
-                            &block_states, &biomes, &mut staging_buffer,
-                            coords, chunks, column_biomes
-                        );
+                
+                if let Some((coords, buffer, chunks, column_biomes)) = pending {
+                    minecraft::block_state::fill_buffer(
+                        &block_states, &biomes, &mut staging_buffer,
+                        coords, chunks, column_biomes
+                    );
+                    
+                    if !staging_buffer.is_empty() {
                         *buffer.borrow_mut() = Some(
                             renderer.create_buffer(&staging_buffer[..])
                         );
                         staging_buffer.clear();
-
-                        if pending_chunks.is_empty() {
-                            println!("Finished filling chunk vertex buffers.");
-                        }
+                    } else {
+                        *buffer.borrow_mut() = None;
                     }
-                    None => {}
+
+                    if pending_chunks.is_empty() {
+                        println!("Finished filling chunk vertex buffers.");
+                    }
                 }
             }
             Input::Press(Keyboard(Key::C)) => {

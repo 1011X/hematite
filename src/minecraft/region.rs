@@ -21,8 +21,7 @@ pub struct Region {
 }
 
 fn array_16x16x16<T, F>(mut f: F) -> [[[T; SIZE]; SIZE]; SIZE]
-    where F: FnMut(usize, usize, usize) -> T
-{
+where F: FnMut(usize, usize, usize) -> T {
     Array::from_fn(|y| -> [[T; SIZE]; SIZE] {
         Array::from_fn(|z| -> [T; 16] {
             Array::from_fn(|x| f(x, y, z))
@@ -32,8 +31,8 @@ fn array_16x16x16<T, F>(mut f: F) -> [[[T; SIZE]; SIZE]; SIZE]
 
 impl Region {
     pub fn open(filename: &Path) -> io::Result<Region> {
-        let mmap = try!(Mmap::open_path(filename, Protection::Read));
-        Ok(Region{mmap: mmap})
+        let mmap = Mmap::open_path(filename, Protection::Read)?;
+        Ok(Region{mmap})
     }
 
     fn as_slice(&self) -> &[u8] {
@@ -66,7 +65,7 @@ impl Region {
         let mut level = c.remove("Level").unwrap().into_compound().unwrap();
         let mut chunks = Vec::new();
         for chunk in level.remove("Sections")
-            .unwrap().into_compound_list().unwrap().into_iter() {
+        .unwrap().into_compound_list().unwrap() {
 
             let y = chunk.get("Y")
                 .unwrap().as_byte().unwrap();
@@ -85,10 +84,9 @@ impl Region {
                 blocks: array_16x16x16(|x, y, z| {
                     let i = (y * SIZE + z) * SIZE + x;
                     let top = match blocks_top {
-                        Some(blocks_top) => {
-                            (blocks_top[i >> 1] >> ((i & 1) * 4)) & 0x0f
-                        }
-                        None => 0
+                        Some(blocks_top) =>
+                            (blocks_top[i >> 1] >> ((i & 1) * 4)) & 0x0f,
+                        None => 0,
                     };
                     let data = (blocks_data[i >> 1] >> ((i & 1) * 4)) & 0x0f;
                     BlockState {
@@ -114,7 +112,7 @@ impl Region {
         let biomes = level.get("Biomes")
             .unwrap().as_bytearray().unwrap();
         Some(ChunkColumn {
-            chunks: chunks,
+            chunks,
             buffers: Array::from_fn(|_| RefCell::new(None)),
             biomes: Array::from_fn(|z| -> [BiomeId; SIZE] {
                 Array::from_fn(|x| {

@@ -41,7 +41,7 @@ pub struct Chunk {
 }
 
 // TODO: Change to const pointer.
-pub const EMPTY_CHUNK: &'static Chunk = &Chunk {
+pub const EMPTY_CHUNK: &Chunk = &Chunk {
     blocks: [[[EMPTY_BLOCK; SIZE]; SIZE]; SIZE],
     light_levels: [[[LightLevel {value: 0xf0}; SIZE]; SIZE]; SIZE]
 };
@@ -99,13 +99,9 @@ impl<R: gfx::Resources> ChunkManager<R> {
     }
 
     pub fn each_chunk<F>(&self, mut f: F)
-        where F: FnMut(/*x:*/ i32, /*y:*/ i32, /*z:*/ i32, /*c:*/ &Chunk, 
-            /*b:*/ &RefCell<Option<gfx::handle::Buffer<R, Vertex>>>)
-    {
-        for (&(x, z), c) in self.chunk_columns.iter() {
-            for (y, (c, b)) in c.chunks.iter()
-                .zip(c.buffers.iter()).enumerate() {
-
+    where F: FnMut(i32, i32, i32, &Chunk, &RefCell<Option<gfx::handle::Buffer<R, Vertex>>>) {
+        for (&(x, z), c) in &self.chunk_columns {
+            for (y, (c, b)) in c.chunks.iter().zip(c.buffers.iter()).enumerate() {
                 f(x, y as i32, z, c, b)
             }
         }

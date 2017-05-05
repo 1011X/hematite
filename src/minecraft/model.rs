@@ -61,7 +61,7 @@ enum PartialTexture {
     Coords(f32, f32)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct PartialModel {
     textures: HashMap<String, PartialTexture>,
     faces: Vec<(Face, String)>,
@@ -108,9 +108,8 @@ impl PartialModel {
                mut f: F) -> T
         where F: FnMut(&PartialModel, &mut AtlasBuilder) -> T
     {
-        match cache.get(name) {
-            Some(model) => return f(model, atlas),
-            None => {}
+        if let Some(model) = cache.get(name) {
+            return f(model, atlas);
         }
         let path = assets.join(Path::new(&format!("minecraft/models/{}.json", name)));
         let obj = json::Json::from_reader(&mut File::open(&path).unwrap()).unwrap();
@@ -119,21 +118,15 @@ impl PartialModel {
             // FIXME(toqueteos): Cthulu himself came here and inspired me, if we use a closure here instead of
             // "clone_parent" this would trigger an error: "reached the recursion limit during monomorphization"
             Some(parent) => PartialModel::load(parent, assets, atlas, cache, clone_parent),
-            None => PartialModel {
-                textures: HashMap::new(),
-                faces: vec![],
-                full_faces: vec![],
-                no_ambient_occlusion: false
-            }
+            None => PartialModel::default()
         };
 
-        match obj.find("ambientocclusion").and_then(|x| x.as_boolean()) {
-            Some(ambient_occlusion) => model.no_ambient_occlusion = !ambient_occlusion,
-            None => {}
+        if let Some(ambient_occlusion) = obj.find("ambientocclusion").and_then(|x| x.as_boolean()) {
+            model.no_ambient_occlusion = !ambient_occlusion;
         }
 
-        match obj.find("textures").and_then(|x| x.as_object()) {
-            Some(textures) => for (name, tex) in textures.iter() {
+        if let Some(textures) = obj.find("textures").and_then(|x| x.as_object()) {
+            for (name, tex) in textures.iter() {
                 let tex = tex.as_string().unwrap();
                 let tex = if tex.starts_with('#') {
                     PartialTexture::Variable(tex[1..].to_string())
@@ -142,12 +135,11 @@ impl PartialModel {
                     PartialTexture::Coords(u as f32, v as f32)
                 };
                 model.textures.insert(name.clone(), tex);
-            },
-            None => {}
+            }
         }
 
-        match obj.find("elements").and_then(|x: &json::Json| x.as_array().cloned()) {
-            Some(elements) => for element in elements.iter().map(|x| x) {
+        if let Some(elements) = obj.find("elements").and_then(|x: &json::Json| x.as_array().cloned()) {
+            for element in &elements {
                 let from = array3_num(element.find("from").unwrap(), |x| x as f32 / 16.0);
                 let to = array3_num(element.find("to").unwrap(), |x| x as f32 / 16.0);
                 let scale = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
@@ -230,49 +222,45 @@ impl PartialModel {
                     }, tex));
                 }
 
-                match element.find("rotation") {
-                    Some(r) => {
-                        let angle = r.find("angle").unwrap().as_f64().unwrap();
-                        let angle = angle as f32 / 180.0 * PI;
-                        let rescale = r.find("rescale").map_or(false, |x| x.as_boolean().unwrap());
-                        let origin = array3_num(r.find("origin").unwrap(), |x| x as f32 / 16.0);
+                if let Some(r) = element.find("rotation") {
+                    let angle = r.find("angle").unwrap().as_f64().unwrap();
+                    let angle = angle as f32 / 180.0 * PI;
+                    let rescale = r.find("rescale").map_or(false, |x| x.as_boolean().unwrap());
+                    let origin = array3_num(r.find("origin").unwrap(), |x| x as f32 / 16.0);
 
-                        let (s, c) = (angle.sin(), angle.cos());
-                        let mut rot = |ix: usize, iy: usize| {
-                            for &mut (ref mut face, _) in model.faces[element_start..].iter_mut() {
-                                face.ao_face = None;
+                    let (s, c) = (angle.sin(), angle.cos());
+                    let mut rot = |ix: usize, iy: usize| {
+                        for &mut (ref mut face, _) in &mut model.faces[element_start..] {
+                            face.ao_face = None;
 
-                                let (ox, oy) = (origin[ix], origin[iy]);
-                                for v in face.vertices.iter_mut() {
-                                    let (x, y) = (v.xyz[ix] - ox, v.xyz[iy] - oy);
-                                    v.xyz[ix] = x * c + y * s;
-                                    v.xyz[iy] =-x * s + y * c;
-                                }
+                            let (ox, oy) = (origin[ix], origin[iy]);
+                            for v in &mut face.vertices {
+                                let (x, y) = (v.xyz[ix] - ox, v.xyz[iy] - oy);
+                                v.xyz[ix] = x * c + y * s;
+                                v.xyz[iy] =-x * s + y * c;
+                            }
 
-                                if rescale {
-                                    for v in face.vertices.iter_mut() {
-                                        v.xyz[ix] *= SQRT_2;
-                                        v.xyz[iy] *= SQRT_2;
-                                    }
-                                }
-
-                                for v in face.vertices.iter_mut() {
-                                    v.xyz[ix] += ox;
-                                    v.xyz[iy] += oy;
+                            if rescale {
+                                for v in &mut face.vertices {
+                                    v.xyz[ix] *= SQRT_2;
+                                    v.xyz[iy] *= SQRT_2;
                                 }
                             }
-                        };
-                        match r.find("axis").unwrap().as_string().unwrap() {
-                            "x" => rot(2, 1),
-                            "y" => rot(0, 2),
-                            "z" => rot(1, 0),
-                            axis => panic!("invalid rotation axis {}", axis)
+
+                            for v in &mut face.vertices {
+                                v.xyz[ix] += ox;
+                                v.xyz[iy] += oy;
+                            }
                         }
+                    };
+                    match r.find("axis").unwrap().as_string().unwrap() {
+                        "x" => rot(2, 1),
+                        "y" => rot(0, 2),
+                        "z" => rot(1, 0),
+                        axis => panic!("invalid rotation axis {}", axis)
                     }
-                    None => {}
                 }
-            },
-            None => {}
+            }
         }
 
         match cache.entry(name.to_string()) {
@@ -296,7 +284,7 @@ impl Model {
                     }
                 }
                 let (u, v) = texture_coords(&partial.textures, tex).unwrap();
-                for vertex in face.vertices.iter_mut() {
+                for vertex in &mut face.vertices {
                     vertex.uv[0] += u;
                     vertex.uv[1] += v;
                 }
@@ -305,14 +293,14 @@ impl Model {
 
             let mut full_faces = [Opacity::Transparent; 6];
             if partial.full_faces.len() >= 6 {
-                for &i in partial.full_faces.iter() {
+                for &i in &partial.full_faces {
                     let face = faces[i].cull_face.unwrap() as usize;
                     if full_faces[face] == Opacity::Opaque {
                         continue;
                     }
                     let (mut min_u, mut min_v) = (INFINITY, INFINITY);
                     let (mut max_u, mut max_v) = (0.0, 0.0);
-                    for vertex in faces[i].vertices.iter() {
+                    for vertex in &faces[i].vertices {
                         let (u, v) = (vertex.uv[0], vertex.uv[1]);
                         min_u = u.min(min_u);
                         min_v = v.min(min_v);
@@ -334,7 +322,7 @@ impl Model {
             }
 
             if partial.no_ambient_occlusion {
-                for face in faces.iter_mut() {
+                for face in &mut faces {
                     face.ao_face = None;
                 }
             } else {
